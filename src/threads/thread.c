@@ -117,6 +117,17 @@ thread_start (void)
   sema_down (&idle_started);
 }
 
+/* First naive implementation of waking up sleeping threads */
+
+void thread_check_sleep_until_and_wake_up(struct thread *t, void *aux) {
+  if (t->sleep_until != 0) {
+    if (t->sleep_until < timer_ticks()) {
+      t->sleep_until = 0;
+      sema_up(&t->sleep_semaphore);
+    }
+  }
+}
+
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
 void
@@ -133,6 +144,9 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
+
+  /* Naive way of waking up sleeping threads */
+  thread_foreach(thread_check_sleep_until_and_wake_up, NULL);
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)

@@ -97,7 +97,6 @@ timer_sleep (int64_t ticks)
   /*while (timer_elapsed (start) < ticks)
     thread_yield ();*/
 
-
   struct thread *current_thread = thread_current();
 
   /* Calculate time to unblock */
