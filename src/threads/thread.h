@@ -93,6 +93,12 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+    /* Lab 2 Task 1 - Improve timer_sleep */
+    /* semaphore for blocking and unblocking the thread */
+    struct semaphore sleep_semaphore;
+    /* stores the time to wake up a sleeping thread */
+    int64_t sleep_until;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */

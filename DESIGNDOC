@@ -31,6 +31,15 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+Additions to struct thread:
+    +   struct semaphore sleep_semaphore;
+	    Semaphore for blocking and unblocking the thread.
+		Gets initialized to zero in init_thread.
+
+    +   int64_t sleep_until;
+        Stores the time to wake up a sleeping thread.
+		Gets set in timer_sleep.
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),

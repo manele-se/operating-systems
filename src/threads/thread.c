@@ -468,6 +468,16 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+
+  /*
+   * Initializing to zero. When calling sema_down, the value
+   * goes negative, and this thread gets put in a blocked state.
+   * When calling sema_up, the value goes back to zero, and
+   * this thread is unblocked.
+   * https://stackoverflow.com/a/20663407
+   */
+  sema_init (&t->sleep_semaphore, 0);
+
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 }
