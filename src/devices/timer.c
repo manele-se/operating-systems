@@ -102,7 +102,8 @@ timer_sleep (int64_t ticks)
 
   /* Pull the semaphore's sleep semaphore down to
    * a negative number, blocking the thread */
-  sema_down(&t->sleep_semaphore);
+  struct thread *current_thread = thread_current ();
+  sema_down(&current_thread->sleep_semaphore);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
