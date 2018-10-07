@@ -5,6 +5,9 @@
 #include <list.h>
 #include <stdint.h>
 
+/* Using a semaphore to implement sleep - must include threads/synch.h */
+#include "threads/synch.h"
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
