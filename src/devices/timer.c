@@ -97,12 +97,14 @@ timer_sleep (int64_t ticks)
   /*while (timer_elapsed (start) < ticks)
     thread_yield ();*/
 
+
+  struct thread *current_thread = thread_current();
+
   /* Calculate time to unblock */
-  t->sleep_until = timer_ticks () + ticks;
+  current_thread->sleep_until = timer_ticks() + ticks;
 
   /* Pull the semaphore's sleep semaphore down to
    * a negative number, blocking the thread */
-  struct thread *current_thread = thread_current ();
   sema_down(&current_thread->sleep_semaphore);
 }
 
