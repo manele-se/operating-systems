@@ -92,8 +92,17 @@ timer_sleep (int64_t ticks)
   int64_t start = timer_ticks ();
 
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+
+  /* Original busy-waiting implementation */
+  /*while (timer_elapsed (start) < ticks)
+    thread_yield ();*/
+
+  /* Calculate time to unblock */
+  t->sleep_until = timer_ticks () + ticks;
+
+  /* Pull the semaphore's sleep semaphore down to
+   * a negative number, blocking the thread */
+  sema_down(&t->sleep_semaphore);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
