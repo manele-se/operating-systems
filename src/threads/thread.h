@@ -131,7 +131,7 @@ void thread_block (void);
 void thread_unblock (struct thread *);
 
 /* Called by timer_sleep - lets thread go into sleep mode */
-void thread_go_to_sleep(struct thread *thread, int64_t until)
+void thread_go_to_sleep(struct thread *thread, int64_t until);
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
