@@ -134,6 +134,7 @@ struct list sleeping_threads;
 /* Used for keeping sleeping_threads sorted by time to wake up
  * Returns TRUE if left thread is to wake up earlier than right thread */
 bool compare_sleep_until(const struct list_elem *l, const struct list_elem *r, void *aux) {
+  (void)aux;
   return (list_entry(l, struct thread, sleep_elem)->sleep_until
           <
           list_entry(r, struct thread, sleep_elem)->sleep_until);
@@ -178,7 +179,7 @@ thread_tick (void)
   /*thread_foreach(thread_check_sleep_until_and_wake_up, NULL);*/
 
   /* More optimal way of waking up sleeping threads */
-  while (TRUE) {
+  while (true) {
     /* If list is empty, loop ends - no more threads to check */
     if (list_empty(&sleeping_threads)) return;
 
@@ -192,7 +193,7 @@ thread_tick (void)
      * because it is sorted by sleep_until, no other threads
      * can be due to wake up! */
     if (sleeping->sleep_until <= timer_ticks()) {
-      list_pop_front(&timer_wait_list);
+      list_pop_front(&sleeping_threads);
       sema_up(&sleeping->sleep_semaphore);
     }
     else {
