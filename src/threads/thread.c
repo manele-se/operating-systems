@@ -136,7 +136,7 @@ struct list sleeping_threads;
 bool compare_sleep_until(const struct list_elem *l, const struct list_elem *r, void *aux) {
   return (list_entry(l, struct thread, sleep_elem)->sleep_until
           <
-          list_entry(r, struct thread, sleep_elem)->sleep_until));
+          list_entry(r, struct thread, sleep_elem)->sleep_until);
 }
 
 /* Puts thread to sleep mode by setting sleep_until, pulling its
