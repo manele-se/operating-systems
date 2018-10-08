@@ -99,12 +99,8 @@ timer_sleep (int64_t ticks)
 
   struct thread *current_thread = thread_current();
 
-  /* Calculate time to unblock */
-  current_thread->sleep_until = timer_ticks() + ticks;
-
-  /* Pull the semaphore's sleep semaphore down to
-   * a negative number, blocking the thread */
-  sema_down(&current_thread->sleep_semaphore);
+  /* Calculate time to unblock and let the thread go to sleep */
+  thread_go_to_sleep(current_thread, timer_ticks() + ticks);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be

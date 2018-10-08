@@ -101,6 +101,8 @@ struct thread
     struct semaphore sleep_semaphore;
     /* stores the time to wake up a sleeping thread */
     int64_t sleep_until;
+    /* allows the thread to be in a list of sleeping threads */
+    struct list_elem sleep_elem;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -127,6 +129,9 @@ tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
+
+/* Called by timer_sleep - lets thread go into sleep mode */
+void thread_go_to_sleep(struct thread *thread, int64_t until)
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);

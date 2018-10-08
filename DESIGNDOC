@@ -5,13 +5,10 @@
 			|   DESIGN DOCUMENT  |
 			+--------------------+
 				   
----- GROUP XX ----
+---- GROUP 19 ----
 
->> Fill in the group number, names and email addresses of your group members.
-
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Elena Marzi <marzi@student.chalmers.se>
+Johannes Magnusson <mjohann@student.chalmers.se>
 
 ---- PRELIMINARIES ----
 
@@ -44,6 +41,16 @@ Additions to struct thread:
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
+
+When calling timer_sleep:
+  The time to wake up is calculated and put in sleep_until.
+  The thread's sleep semaphore is decreased, which blocks the thread.
+
+At each timer tick, in the thread_tick function:
+  The threads that have a value in sleep_until are checked.
+  Those threads that are due to wake up:
+    Their sleep_until is set to zero.
+	Their sleep semaphore is increased, which unblocks the thread.
 
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
