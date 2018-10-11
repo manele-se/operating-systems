@@ -59,6 +59,10 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
 
+/* More optimal implementation of waking up sleeping threads,
+ * using a sorted list */
+struct list sleeping_threads;
+
 static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
@@ -92,6 +96,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleeping_threads);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -126,10 +131,6 @@ thread_start (void)
     }
   }
 }*/
-
-/* More optimal implementation of waking up sleeping threads,
- * using a sorted list */
-struct list sleeping_threads;
 
 /* Used for keeping sleeping_threads sorted by time to wake up
  * Returns TRUE if left thread is to wake up earlier than right thread */
