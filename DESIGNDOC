@@ -37,6 +37,11 @@ Additions to struct thread:
         Stores the time to wake up a sleeping thread.
 		Gets set in timer_sleep.
 
+Later addition to thread.c:
+    +   struct list sleeping_threads;
+	    Global ordered list of sleeping threads, sorted
+		by time to wake up (sleep_until).
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
@@ -54,6 +59,14 @@ At each timer tick, in the thread_tick function:
 
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
+
+  The first solution, which is left in the code as comments, used
+  thread_foreach in each thread_tick to loop through all threads and
+  wake up those that were due to wake up. This was probably not
+  efficient enough : O(n).
+
+  Instead, an ordered list has been created. Because it is sorted
+  by wakeup time, checking for threads to wake up is O(1).
 
 ---- SYNCHRONIZATION ----
 
