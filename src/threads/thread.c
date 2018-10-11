@@ -145,7 +145,7 @@ bool compare_sleep_until(const struct list_elem *l, const struct list_elem *r, v
  * semaphore down, and adding it to the sorted list of sleeping threads */
 void thread_go_to_sleep(struct thread *thread, int64_t until) {
   /* Set time to unblock */
-  printf("    Thread %d sleeps until %ld\n", thread->tid, until);
+  printf("    %lld: Thread %d sleeps until %lld\n", timer_ticks(), thread->tid, until);
   thread->sleep_until = until;
 
   /* Add thread to ordered list of sleeping threads
@@ -195,7 +195,7 @@ thread_tick (void)
      * because it is sorted by sleep_until, no other threads
      * can be due to wake up! */
     if (sleeping->sleep_until <= timer_ticks()) {
-      printf("    Thread %d is sleeping until %ld - time to wake up!\n", sleeping->tid, sleeping->sleep_until);
+      printf("    %lld : Thread %d is sleeping until %lld - time to wake up!\n", timer_ticks(), sleeping->tid, sleeping->sleep_until);
       list_pop_front(&sleeping_threads);
       sema_up(&sleeping->sleep_semaphore);
     }
