@@ -148,16 +148,16 @@ void thread_go_to_sleep(struct thread *thread, int64_t until) {
   printf("    Thread %d sleeps until %ld\n", thread->tid, until);
   thread->sleep_until = until;
 
-  /* Pull the semaphore's sleep semaphore down to
-   * a negative number, blocking the thread */
-  sema_down(&thread->sleep_semaphore);
-
   /* Add thread to ordered list of sleeping threads
    * Must be done wit interrupts disabled to avoid
    * race conditions */
   intr_disable();
   list_insert_ordered(&sleeping_threads, &thread->sleep_elem, compare_sleep_until, NULL);
   intr_enable();
+
+  /* Pull the semaphore's sleep semaphore down to
+   * a negative number, blocking the thread */
+  sema_down(&thread->sleep_semaphore);
 }
 
 /* Called by the timer interrupt handler at each timer tick.
