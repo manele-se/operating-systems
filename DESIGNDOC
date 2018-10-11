@@ -76,10 +76,17 @@ At each timer tick, in the thread_tick function:
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
 
+  Each thread has its own semaphore.
+
+  Adding to the list of sleeping threads takes place between
+  intr_disable and intr_enable
+
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+
+  
 
 			    BATCH SCHEDULING
 			    ================
