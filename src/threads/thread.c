@@ -190,13 +190,12 @@ thread_tick (void)
     struct list_elem *front = list_front(&sleeping_threads);
     struct thread *sleeping = list_entry(front, struct thread, sleep_elem);
 
-    printf("    Thread %d is sleeping until %ld - not time to wake up yet\n", sleeping->tid, sleeping->sleep_until);
-
     /* If the thread is supposed to wake up, wake it up
      * Otherwise, no need to check more threads in this list
      * because it is sorted by sleep_until, no other threads
      * can be due to wake up! */
     if (sleeping->sleep_until <= timer_ticks()) {
+      printf("    Thread %d is sleeping until %ld - time to wake up!\n", sleeping->tid, sleeping->sleep_until);
       list_pop_front(&sleeping_threads);
       sema_up(&sleeping->sleep_semaphore);
     }
