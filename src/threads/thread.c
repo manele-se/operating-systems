@@ -145,6 +145,7 @@ bool compare_sleep_until(const struct list_elem *l, const struct list_elem *r, v
  * semaphore down, and adding it to the sorted list of sleeping threads */
 void thread_go_to_sleep(struct thread *thread, int64_t until) {
   /* Set time to unblock */
+  fprintf(stderr, "    Thread %d sleeps until %ld\n", thread->tid, until);
   thread->sleep_until = until;
 
   /* Pull the semaphore's sleep semaphore down to
@@ -188,6 +189,8 @@ thread_tick (void)
      * thread with the lowest value of sleep_until */
     struct list_elem *front = list_front(&sleeping_threads);
     struct thread *sleeping = list_entry(front, struct thread, sleep_elem);
+
+    fprintf(stderr, "    Thread %d is sleeping until %ld - not time to wake up yet\n", sleeping->tid, sleeping->sleep_until);
 
     /* If the thread is supposed to wake up, wake it up
      * Otherwise, no need to check more threads in this list
