@@ -15,10 +15,7 @@ prioq_init(struct prio_queue *pq)
 
   pq->capacity = PRIOQ_INITIAL_CAPACITY;
   pq->count = (size_t)0;
-  int array_length = pq->capacity + 1;
-  printf("before malloc");
-  pq->array = malloc(array_length * sizeof(void *));
-  printf("after malloc");
+  pq->array = NULL;
 }
 
 void
@@ -33,6 +30,11 @@ void
 prioq_add(struct prio_queue *pq, void *element, prioq_less_func less_func) 
  {
     size_t index, parent;
+
+    if (pq->array == NULL) {
+        int array_length = pq->capacity + 1;
+        pq->array = malloc(array_length * sizeof(void *));
+    }
 
     if (pq->count == pq->capacity) {
         pq->capacity = pq->capacity * 2 + 1;
