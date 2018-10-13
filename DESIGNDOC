@@ -54,38 +54,40 @@ When calling timer_sleep:
 At each timer tick, in the thread_tick function:
   The threads that have a value in sleep_until are checked.
   Those threads that are due to wake up:
-    Their sleep_until is set to zero.
-	Their sleep semaphore is increased, which unblocks the thread.
+  	Their sleep semaphore is increased, which unblocks the thread.
 
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
 
   The first solution, which is left in the code as comments, used
   thread_foreach in each thread_tick to loop through all threads and
-  wake up those that were due to wake up. This was probably not
+  wake up those that were due to wake up. This was  not
   efficient enough : O(n).
 
   Instead, an ordered list has been created. Because it is sorted
-  by wakeup time, checking for threads to wake up is O(1).
+  by wakeup time, checking for threads to wake up is O(1). The list is a 
+  linked list ...(MORE)
+
+
 
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
 
+ Each thread has its own semaphore..........(MORE)
+
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
 
-  Each thread has its own semaphore.
-
   Adding to the list of sleeping threads takes place between
-  intr_disable and intr_enable
+  intr_disable and intr_enable (MORE)
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
-
+(TO DO)
   
 
 			    BATCH SCHEDULING
