@@ -216,7 +216,7 @@ thread_tick (void)
 //    else {
 //      break;
 //    }
-  }
+//  }
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
