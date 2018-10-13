@@ -7,7 +7,9 @@
 #define ASSERT(x) (void)(0)
 #endif
 
-void prioq_init(struct prio_queue *pq) {
+void 
+prioq_init(struct prio_queue *pq)
+ {
   ASSERT (pq != NULL);
 
   pq->capacity = PRIOQ_INITIAL_CAPACITY;
@@ -16,13 +18,17 @@ void prioq_init(struct prio_queue *pq) {
   pq->array = malloc(array_length * sizeof(void *));
 }
 
-void prioq_cleanup(struct prio_queue *pq) {
+void
+prioq_cleanup(struct prio_queue *pq) 
+ {
     ASSERT (pq != NULL);
 
     free(pq->array);
 }
 
-void prioq_add(struct prio_queue *pq, void *element, prioq_less_func less_func) {
+void
+prioq_add(struct prio_queue *pq, void *element, prioq_less_func less_func) 
+ {
     size_t index, parent;
 
     if (pq->count == pq->capacity) {
@@ -44,7 +50,9 @@ void prioq_add(struct prio_queue *pq, void *element, prioq_less_func less_func) 
     pq->array[index] = element;
 }
 
-void *prioq_peek(struct prio_queue *pq) {
+void 
+*prioq_peek(struct prio_queue *pq)
+ {
     if (pq->count) {
         return pq->array[1];
     }
@@ -53,7 +61,9 @@ void *prioq_peek(struct prio_queue *pq) {
 
 #define SWAP(a,b,TYPE) { TYPE c = (a); (a) = (b); (b) = (c); }
 
-void prioq_remove_first(struct prio_queue *pq, prioq_less_func less_func) {
+void 
+prioq_remove_first(struct prio_queue *pq, prioq_less_func less_func)
+ {
     size_t index = 1;
 
     if (pq->count == 0) return;
