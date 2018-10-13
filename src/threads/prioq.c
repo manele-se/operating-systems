@@ -1,7 +1,8 @@
 #include "./prioq.h"
 
 /*#include <debug.h>*/
-#include <stdlib.h>
+/*#include <stdlib.h>*/
+#include "threads/malloc.h"
 
 #ifndef ASSERT
 #define ASSERT(x) (void)(0)
