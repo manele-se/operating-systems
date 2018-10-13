@@ -62,7 +62,7 @@ bool thread_mlfqs;
 
 /* More optimal implementation of waking up sleeping threads,
  * using a priority queue */
-struct prioq sleeping_threads;
+struct prio_queue sleeping_threads;
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -188,7 +188,7 @@ thread_tick (void)
     if (sleeping->sleep_until > timer_ticks()) {
       break;
     }
-    prioq_remove_next(&sleeping_threads);
+    prioq_remove_first(&sleeping_threads);
     sema_up(&sleeping->sleep_semaphore);
   }
 //  while (true) {
