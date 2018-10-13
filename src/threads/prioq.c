@@ -16,7 +16,9 @@ prioq_init(struct prio_queue *pq)
   pq->capacity = PRIOQ_INITIAL_CAPACITY;
   pq->count = (size_t)0;
   int array_length = pq->capacity + 1;
+  printf("before malloc");
   pq->array = malloc(array_length * sizeof(void *));
+  printf("after malloc");
 }
 
 void
