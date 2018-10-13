@@ -135,15 +135,19 @@ thread_start (void)
 
 /* Used for keeping sleeping_threads sorted by time to wake up
  * Returns TRUE if left thread is to wake up earlier than right thread */
-bool compare_sleep_until(const void *l, const void *r) {
-  return ((struct thread)l)->sleep_until
+bool 
+compare_sleep_until(const void *l, const void *r) 
+{
+  return ((struct thread *)l)->sleep_until
           <
-         ((struct thread)l)->sleep_until;
+         ((struct thread *)r)->sleep_until;
 }
 
 /* Puts thread to sleep mode by setting sleep_until, pulling its
  * semaphore down, and adding it to the sorted list of sleeping threads */
-void thread_go_to_sleep(struct thread *thread, int64_t until) {
+void 
+thread_go_to_sleep(struct thread *thread, int64_t until)
+ {
   /* Set time to unblock */
   /*printf("    %ld: Thread %d sleeps until %ld\n", timer_ticks(), thread->tid, until);*/
   thread->sleep_until = until;
@@ -188,7 +192,7 @@ thread_tick (void)
     if (sleeping->sleep_until > timer_ticks()) {
       break;
     }
-    prioq_remove_first(&sleeping_threads);
+    prioq_remove_first(&sleeping_threads, compare_sleep_until);
     sema_up(&sleeping->sleep_semaphore);
   }
 //  while (true) {
@@ -207,7 +211,7 @@ thread_tick (void)
 //    if (sleeping->sleep_until <= timer_ticks()) {
 ///*      printf("    %ld : Thread %d is sleeping until %ld - time to wake up!\n", timer_ticks(), sleeping->tid, sleeping->sleep_until);*/
 //      list_pop_front(&sleeping_threads);
-/      sema_up(&sleeping->sleep_semaphore);
+//      sema_up(&sleeping->sleep_semaphore);
 //    }
 //    else {
 //      break;
