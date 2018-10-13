@@ -1,0 +1,5 @@
+#!/bin/sh
+
+gcc ./test_prioq.c ./threads/prioq.c -o test_prioq
+chmod 740 ./test_prioq
+./test_prioq
