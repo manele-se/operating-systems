@@ -11,7 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-#include "threads/prioq.h"
+//#include "threads/prioq.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -61,8 +61,9 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 bool thread_mlfqs;
 
 /* More optimal implementation of waking up sleeping threads,
- * using a priority queue */
-struct prio_queue sleeping_threads;
+ * using a linked list (tried using a priority queue, but that was less efficient) */
+//struct prio_queue sleeping_threads;
+struct list sleeping_threads;
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -97,7 +98,8 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
-  prioq_init (&sleeping_threads);
+//  prioq_init (&sleeping_threads);
+  list_init (&sleeping_threads);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -135,12 +137,20 @@ thread_start (void)
 
 /* Used for keeping sleeping_threads sorted by time to wake up
  * Returns TRUE if left thread is to wake up earlier than right thread */
-bool 
+/*bool 
 compare_sleep_until(const void *l, const void *r) 
 {
   return ((struct thread *)l)->sleep_until
           <
          ((struct thread *)r)->sleep_until;
+}*/
+bool 
+compare_sleep_until(const struct list_elem *l, const struct list_elem *r, void *aux) 
+{
+  (void)aux;
+  return list_entry(l, struct thread, sleep_elem)->sleep_until
+          <
+         list_entry(r, struct thread, sleep_elem)->sleep_until;
 }
 
 /* Puts thread to sleep mode by setting sleep_until, pulling its
@@ -156,7 +166,8 @@ thread_go_to_sleep(struct thread *thread, int64_t until)
    * Must be done wit interrupts disabled to avoid
    * race conditions */
   intr_disable();
-  prioq_add(&sleeping_threads, thread, compare_sleep_until);
+  //prioq_add(&sleeping_threads, thread, compare_sleep_until);
+  list_insert_ordered(&sleeping_threads, &thread->sleep_elem, compare_sleep_until, NULL);
   intr_enable();
 
   /* Pull the semaphore's sleep semaphore down to
@@ -170,7 +181,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
-  struct thread *sleeping;
+  //struct thread *sleeping;
 
   /* Update statistics. */
   if (t == idle_thread)
@@ -185,38 +196,40 @@ thread_tick (void)
   /* Naive way of waking up sleeping threads */
   /*thread_foreach(thread_check_sleep_until_and_wake_up, NULL);*/
 
-  /* More optimal way of waking up sleeping threads */
-  while (sleeping = prioq_peek(&sleeping_threads)) {
-    /* If the first thread in the priority queue is not yet
-     * due to wake up, break immediately */
-    if (sleeping->sleep_until > timer_ticks()) {
-      break;
-    }
-    prioq_remove_first(&sleeping_threads, compare_sleep_until);
-    sema_up(&sleeping->sleep_semaphore);
-  }
-//  while (true) {
-//    /* If list is empty, loop ends - no more threads to check */
-//    if (list_empty(&sleeping_threads)) return;
-//
-//    /* Get the thread at the front of the list - this is the
-//     * thread with the lowest value of sleep_until */
-//    struct list_elem *front = list_front(&sleeping_threads);
-//    struct thread *sleeping = list_entry(front, struct thread, sleep_elem);
-//
-//    /* If the thread is supposed to wake up, wake it up
-//     * Otherwise, no need to check more threads in this list
-//     * because it is sorted by sleep_until, no other threads
-//     * can be due to wake up! */
-//    if (sleeping->sleep_until <= timer_ticks()) {
-///*      printf("    %ld : Thread %d is sleeping until %ld - time to wake up!\n", timer_ticks(), sleeping->tid, sleeping->sleep_until);*/
-//      list_pop_front(&sleeping_threads);
-//      sema_up(&sleeping->sleep_semaphore);
-//    }
-//    else {
-//      break;
-//    }
-//  }
+  /* Priority queue */
+  // while (sleeping = prioq_peek(&sleeping_threads)) {
+  //   /* If the first thread in the priority queue is not yet
+  //    * due to wake up, break immediately */
+  //   if (sleeping->sleep_until > timer_ticks()) {
+  //     break;
+  //   }
+  //   prioq_remove_first(&sleeping_threads, compare_sleep_until);
+  //   sema_up(&sleeping->sleep_semaphore);
+  // }
+
+  /* Most optimal way of waking up sleeping threads */
+ while (true) {
+   /* If list is empty, loop ends - no more threads to check */
+   if (list_empty(&sleeping_threads)) return;
+
+   /* Get the thread at the front of the list - this is the
+    * thread with the lowest value of sleep_until */
+   struct list_elem *front = list_front(&sleeping_threads);
+   struct thread *sleeping = list_entry(front, struct thread, sleep_elem);
+
+   /* If the thread is supposed to wake up, wake it up
+    * Otherwise, no need to check more threads in this list
+    * because it is sorted by sleep_until, no other threads
+    * can be due to wake up! */
+   if (sleeping->sleep_until <= timer_ticks()) {
+/*      printf("    %ld : Thread %d is sleeping until %ld - time to wake up!\n", timer_ticks(), sleeping->tid, sleeping->sleep_until);*/
+     list_pop_front(&sleeping_threads);
+     sema_up(&sleeping->sleep_semaphore);
+   }
+   else {
+     break;
+   }
+ }
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
