@@ -193,35 +193,64 @@ void oneTask(task_t task) {
   getSlot(task);
   transferData(task);
   leaveSlot(task);
-}
 
+static int senders_running = 0;
+static int receivers_running = 0;
+static int high_priority_running = 0;
+static int senders_waiting = 0;
+static int receivers_waiting = 0;
+static int low_priority_waiting = 0;
+static int high_priority_waiting = 0;
+static struct condition low_prio_cond;
+static struct condition high_prio_cond;
+static struct condition senders_cond;
+static struct condition receivers_cond;
 
 /* task tries to get slot on the bus subsystem */
 void getSlot(task_t task) 
 {
-    sema_up(&running_sema);
-
+    bool waiting = false;
     lock_acquire(&sync_lock);
-    if (task.priority) {
-        if (task.direction == SENDER) {
-            sema_up(&high_senders_sema);
-        }
-        else {
-            sema_up(&high_receivers_sema);
-        }
-        cond_wait(&start_all_cond, &sync_lock);
-    }
-    else {
-        cond_wait(&start_all_cond, &sync_lock);
-        if (high_senders_sema.value + high_receivers_sema.value > 0) {
-//            msg("%s waiting for high prio cond", thread_name());
-            cond_wait(&high_prio_cond, &sync_lock);
-//            msg("%s done waiting for high prio cond", thread_name());
-        }
-    }
-    lock_release(&sync_lock);
+    int total_running = senders_running + receivers_running;
 
-    sema_down(&capacity_sema);
+    do {
+        if (task.priority == HIGH && high_priority_running == 0 && total_running > 0) {
+            high_priority_waiting++;
+            cond_wait(&high_prio_cond, &sync_lock);
+            waiting = true;
+            high_priority_waiting--;
+        }
+        else if (task.priority == NORMAL && high_priority_running > 0) {
+            low_priority_waiting++;
+            cond_wait(&low_prio_cond, &sync_lock);
+            waiting = true;
+            low_priority_waiting--;
+        }
+        else if (task.direction == SENDER && (receivers_running > 0 || total_running == MAX_CAPACITY)) {
+            senders_waiting++;
+            cond_wait(&senders_cond, &sync_lock);
+            waiting = true;
+            senders_waiting--;
+        }
+        else if (task.direction == RECEIVER && (senders_running > 0 || total_running == MAX_CAPACITY)) {
+            receivers_waiting++;
+            cond_wait(&receivers_cond, &sync_lock);
+            waiting = true;
+            receivers_waiting--;
+        }
+    } while (waiting);
+
+    if (task.priority == HIGH) {
+        high_priority_running++;
+    }
+    if (task.direction == SENDER) {
+        senders_running++;
+    }
+    if (task.direction == RECEIVER) {
+        receivers_running++;
+    }
+
+    lock_release(&sync_lock);
 }
 
 #define RANDOM_SLEEP_MIN 10
@@ -240,24 +269,24 @@ void transferData(task_t task)
 void leaveSlot(task_t task) 
 {
     lock_acquire(&sync_lock);
-    if (task.priority) {
-        if (task.direction == SENDER) {
-            sema_down(&high_senders_sema);
-        }
-        else {
-            sema_down(&high_receivers_sema);
-        }
-        if (high_senders_sema.value + high_receivers_sema.value == 0) {
-//            msg("%s broadcasting to lower prio threads", thread_name());
-            cond_broadcast(&high_prio_cond, &sync_lock);
-//            msg("%s done broadcasting to lower prio threads", thread_name());
-        }
+    /* Att göra: Tänk VERKLIGEN på rätt if-satser! */
+    if (high_priority_waiting > 0) {
+        cond_broadcast(&high_prio_cond, &sync_lock);
     }
-
-    sema_down(&running_sema);
-    if (running_sema.value == 0) {
-        sema_up(&main_wait_sema);
+    else if (low_priority_waiting > 0) {
+        cond_broadcast(&low_prio_cond, &sync_lock);
+    }
+    else if (senders_waiting > 0 && senders_running > 0) {
+        cond_signal(&senders_cond, &sync_lock);
+    }
+    else if (receivers_waiting > 0 && receivers_running > 0) {
+        cond_signal(&receivers_cond, &sync_lock);
+    }
+    else if (senders_waiting > 0) {
+        cond_signal(&senders_cond, &sync_lock);
+    }
+    else if (receivers_waiting > 0) {
+        cond_signal(&receivers_cond, &sync_lock);
     }
     lock_release(&sync_lock);
-    sema_up(&capacity_sema);
 }
