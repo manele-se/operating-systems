@@ -235,6 +235,17 @@ void transferData(task_t task)
 void leaveSlot(task_t task) 
 {
     lock_acquire(&sync_lock);
+
+    if (task.priority) {
+        high_priority_running--;
+    }
+    if (task.direction == SENDER) {
+        senders_running--;
+    }
+    else {
+        receivers_running--;
+    }
+    
     /* Att göra: Tänk VERKLIGEN på rätt if-satser! */
     if (high_priority_waiting > 0) {
         cond_broadcast(&high_prio_cond, &sync_lock);
@@ -253,16 +264,6 @@ void leaveSlot(task_t task)
     }
     else if (receivers_waiting > 0) {
         cond_signal(&receivers_cond, &sync_lock);
-    }
-
-    if (task.priority) {
-        high_priority_running--;
-    }
-    if (task.direction == SENDER) {
-        senders_running--;
-    }
-    else {
-        receivers_running--;
     }
 
     lock_release(&sync_lock);
