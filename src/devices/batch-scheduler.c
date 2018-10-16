@@ -29,26 +29,17 @@ typedef struct {
 /* Lock for synchronizing coordinated semaphore operations */
 struct lock sync_lock;
 
-/* Semaphore that keeps track of number of running threads */
-struct semaphore running_sema;
-
-/* Semaphore that lets main thread wait for all running threads */
-struct semaphore main_wait_sema;
-
-/* Semaphore that keeps track of high-priority sender and
- * receiver threads, waiting for a slot */
-struct semaphore high_senders_sema;
-struct semaphore high_receivers_sema;
-
-/* Condition variable that lets low priority threads wait
- * until all high priority threads are done */
-struct condition high_prio_cond;
-
-/* Condition variable that signals to all threads to start */
-struct condition start_all_cond;
-
-/* Semaphore that keeps the maximum connections to BUS_CAPACITY */
-struct semaphore capacity_sema;
+static int senders_running = 0;
+static int receivers_running = 0;
+static int high_priority_running = 0;
+static int senders_waiting = 0;
+static int receivers_waiting = 0;
+static int low_priority_waiting = 0;
+static int high_priority_waiting = 0;
+static struct condition low_prio_cond;
+static struct condition high_prio_cond;
+static struct condition senders_cond;
+static struct condition receivers_cond;
 
 void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
         unsigned int num_priority_send, unsigned int num_priority_receive);
@@ -72,11 +63,15 @@ void init_bus(void){
     random_init((unsigned int)123456789); 
 
     lock_init(&sync_lock);
-    sema_init(&capacity_sema, BUS_CAPACITY);
+/*    sema_init(&capacity_sema, BUS_CAPACITY);
     sema_init(&high_senders_sema, 0);
     sema_init(&high_receivers_sema, 0);
     cond_init(&high_prio_cond);
-    cond_init(&start_all_cond);
+    cond_init(&start_all_cond);*/
+    cond_init(&low_prio_cond);
+    cond_init(&high_prio_cond);
+    cond_init(&senders_cond);
+    cond_init(&receivers_cond);
 }
 
 /*
@@ -93,16 +88,9 @@ void init_bus(void){
 void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
         unsigned int num_priority_send, unsigned int num_priority_receive)
 {
-    int total_threads = num_tasks_send +
-                        num_task_receive +
-                        num_priority_send +
-                        num_priority_receive;
     char name[16];
 
     if (total_threads == 0) return;
-
-    sema_init(&running_sema, 0);
-    sema_init(&main_wait_sema, 0);
 
     /* Create threads in random order - gives better testing */
 
@@ -133,34 +121,11 @@ void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
             --total_threads;
         }
     }
-/*
-    for (i = 0; i < num_priority_send; i++) {
-        snprintf(name, 16, "send_high_%i", i);
-        thread_create(name, HIGH, senderPriorityTask, NULL);
+
+    while (senders_running + receivers_running + high_priority_running + senders_waiting + receivers_waiting + low_priority_waiting + high_priority_waiting) {
+        thread_yield();
     }
 
-    for (i = 0; i < num_priority_receive; i++) {
-        snprintf(name, 16, "receive_high_%i", i);
-        thread_create(name, HIGH, receiverPriorityTask, NULL);
-    }
-
-    for (i = 0; i < num_tasks_send; i++) {
-        snprintf(name, 16, "send_%i", i);
-        thread_create(name, NORMAL, senderTask, NULL);
-    }
-
-    for (i = 0; i < num_task_receive; i++) {
-        snprintf(name, 16, "rec_%i", i);
-        thread_create(name, NORMAL, receiverTask, NULL);
-    }
-*/
-    thread_yield();
-    lock_acquire(&sync_lock);
-    cond_broadcast(&start_all_cond, &sync_lock);
-    lock_release(&sync_lock);
-
-    /* Wait for all threads to finish */
-    sema_down(&main_wait_sema);
     msg("Done!");
 }
 
@@ -193,18 +158,7 @@ void oneTask(task_t task) {
   getSlot(task);
   transferData(task);
   leaveSlot(task);
-
-static int senders_running = 0;
-static int receivers_running = 0;
-static int high_priority_running = 0;
-static int senders_waiting = 0;
-static int receivers_waiting = 0;
-static int low_priority_waiting = 0;
-static int high_priority_waiting = 0;
-static struct condition low_prio_cond;
-static struct condition high_prio_cond;
-static struct condition senders_cond;
-static struct condition receivers_cond;
+}
 
 /* task tries to get slot on the bus subsystem */
 void getSlot(task_t task) 
