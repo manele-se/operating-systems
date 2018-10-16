@@ -133,11 +133,11 @@ void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
         }
     }
 
-    while (senders_running + receivers_running + high_priority_running + senders_waiting + receivers_waiting + low_priority_waiting + high_priority_waiting) {
+    do {
         thread_yield();
-    }
+    } while (senders_running + receivers_running + high_priority_running + senders_waiting + receivers_waiting + low_priority_waiting + high_priority_waiting)
 
-    msg("Done!");
+    vmsg("Done!");
 }
 
 /* Normal task,  sending data to the accelerator */
