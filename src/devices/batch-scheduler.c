@@ -8,14 +8,13 @@
 #include "threads/thread.h"
 #include "devices/timer.h"
 #include "lib/random.h" //generate random numbers
+#include "devices/verbose.h" // Change this file to control output
 
 #define BUS_CAPACITY 3
 #define SENDER 0
 #define RECEIVER 1
 #define NORMAL 0
 #define HIGH 1
-
-char *action_verbs[] = { "Sending", "Receiving" };
 
 /*
  *	initialize task with direction and priority
@@ -40,6 +39,17 @@ static struct condition low_prio_cond;
 static struct condition high_prio_cond;
 static struct condition senders_cond;
 static struct condition receivers_cond;
+
+/* Semaphores that keep track of currently sending/receiving tasks */
+struct semaphore senders_sema;
+struct semaphore receivers_sema;
+
+/* Condition variables that signals:
+ * - to senders that no task is receiving
+ * - to receivers that no task is sending
+ */
+struct condition sending_ok_cond;
+struct condition receiving_ok_cond;
 
 void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
         unsigned int num_priority_send, unsigned int num_priority_receive);
@@ -214,8 +224,9 @@ void getSlot(task_t task)
 /* task processes data on the bus send/receive */
 void transferData(task_t task) 
 {
+    static char *action_verbs[] = { "Sending", "Receiving" };
     unsigned long ticks = random_ulong() % RANDOM_SLEEP_INTERVAL + RANDOM_SLEEP_MIN;
-    printf("%s %s data for %lu ticks\n", thread_name(), action_verbs[task.direction], ticks);
+    vmsg("%s %s data for %lu ticks", thread_name(), action_verbs[task.direction], ticks);
     timer_sleep(ticks);
 }
 
@@ -242,5 +253,6 @@ void leaveSlot(task_t task)
     else if (receivers_waiting > 0) {
         cond_signal(&receivers_cond, &sync_lock);
     }
+
     lock_release(&sync_lock);
 }
