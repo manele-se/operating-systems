@@ -8,14 +8,13 @@
 #include "threads/thread.h"
 #include "devices/timer.h"
 #include "lib/random.h" //generate random numbers
+#include "devices/verbose.h" // Change this file to control output
 
 #define BUS_CAPACITY 3
 #define SENDER 0
 #define RECEIVER 1
 #define NORMAL 0
 #define HIGH 1
-
-char *action_verbs[] = { "Sending", "Receiving" };
 
 /*
  *	initialize task with direction and priority
@@ -50,6 +49,17 @@ struct condition start_all_cond;
 /* Semaphore that keeps the maximum connections to BUS_CAPACITY */
 struct semaphore capacity_sema;
 
+/* Semaphores that keep track of currently sending/receiving tasks */
+struct semaphore senders_sema;
+struct semaphore receivers_sema;
+
+/* Condition variables that signals:
+ * - to senders that no task is receiving
+ * - to receivers that no task is sending
+ */
+struct condition sending_ok_cond;
+struct condition receiving_ok_cond;
+
 void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
         unsigned int num_priority_send, unsigned int num_priority_receive);
 
@@ -73,10 +83,16 @@ void init_bus(void){
 
     lock_init(&sync_lock);
     sema_init(&capacity_sema, BUS_CAPACITY);
+
     sema_init(&high_senders_sema, 0);
     sema_init(&high_receivers_sema, 0);
     cond_init(&high_prio_cond);
     cond_init(&start_all_cond);
+
+    sema_init(&senders_sema, 0);
+    sema_init(&receivers_sema, 0);
+    cond_init(&sending_ok_cond);
+    cond_init(&receiving_ok_cond);
 }
 
 /*
@@ -133,27 +149,7 @@ void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
             --total_threads;
         }
     }
-/*
-    for (i = 0; i < num_priority_send; i++) {
-        snprintf(name, 16, "send_high_%i", i);
-        thread_create(name, HIGH, senderPriorityTask, NULL);
-    }
 
-    for (i = 0; i < num_priority_receive; i++) {
-        snprintf(name, 16, "receive_high_%i", i);
-        thread_create(name, HIGH, receiverPriorityTask, NULL);
-    }
-
-    for (i = 0; i < num_tasks_send; i++) {
-        snprintf(name, 16, "send_%i", i);
-        thread_create(name, NORMAL, senderTask, NULL);
-    }
-
-    for (i = 0; i < num_task_receive; i++) {
-        snprintf(name, 16, "rec_%i", i);
-        thread_create(name, NORMAL, receiverTask, NULL);
-    }
-*/
     thread_yield();
     lock_acquire(&sync_lock);
     cond_broadcast(&start_all_cond, &sync_lock);
@@ -161,7 +157,7 @@ void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
 
     /* Wait for all threads to finish */
     sema_down(&main_wait_sema);
-    msg("Done!");
+    vmsg("Done!");
 }
 
 /* Normal task,  sending data to the accelerator */
@@ -214,10 +210,20 @@ void getSlot(task_t task)
     else {
         cond_wait(&start_all_cond, &sync_lock);
         if (high_senders_sema.value + high_receivers_sema.value > 0) {
-//            msg("%s waiting for high prio cond", thread_name());
             cond_wait(&high_prio_cond, &sync_lock);
-//            msg("%s done waiting for high prio cond", thread_name());
         }
+    }
+    if (task.direction == SENDER) {
+        if (receivers_sema.value > 0) {
+            cond_wait(&sending_ok_cond, &sync_lock);
+        }
+        sema_up(&senders_sema);
+    }
+    else {
+        if (senders_sema.value > 0) {
+            cond_wait(&receiving_ok_cond, &sync_lock);
+        }
+        sema_up(&receivers_sema);
     }
     lock_release(&sync_lock);
 
@@ -231,8 +237,9 @@ void getSlot(task_t task)
 /* task processes data on the bus send/receive */
 void transferData(task_t task) 
 {
+    static char *action_verbs[] = { "Sending", "Receiving" };
     unsigned long ticks = random_ulong() % RANDOM_SLEEP_INTERVAL + RANDOM_SLEEP_MIN;
-    printf("%s %s data for %lu ticks\n", thread_name(), action_verbs[task.direction], ticks);
+    vmsg("%s %s data for %lu ticks", thread_name(), action_verbs[task.direction], ticks);
     timer_sleep(ticks);
 }
 
@@ -248,9 +255,26 @@ void leaveSlot(task_t task)
             sema_down(&high_receivers_sema);
         }
         if (high_senders_sema.value + high_receivers_sema.value == 0) {
-//            msg("%s broadcasting to lower prio threads", thread_name());
             cond_broadcast(&high_prio_cond, &sync_lock);
-//            msg("%s done broadcasting to lower prio threads", thread_name());
+        }
+    }
+
+    if (task.direction == SENDER) {
+        sema_down(&senders_sema);
+        if (sema_try_down(&senders_sema)) {
+            sema_up(&senders_sema);
+        }
+        else {
+            cond_broadcast(&receiving_ok_cond, &sync_lock);
+        }
+    }
+    else {
+        sema_down(&receivers_sema);
+        if (sema_try_down(&receivers_sema)) {
+            sema_up(&receivers_sema);
+        }
+        else {
+            cond_broadcast(&sending_ok_cond, &sync_lock);
         }
     }
 
@@ -258,6 +282,7 @@ void leaveSlot(task_t task)
     if (running_sema.value == 0) {
         sema_up(&main_wait_sema);
     }
+
     lock_release(&sync_lock);
     sema_up(&capacity_sema);
 }
