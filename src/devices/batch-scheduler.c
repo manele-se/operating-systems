@@ -176,9 +176,9 @@ void getSlot(task_t task)
 {
     bool waiting = false;
     lock_acquire(&sync_lock);
-    int total_running = senders_running + receivers_running;
 
     do {
+        int total_running = senders_running + receivers_running;
         if (task.priority == HIGH && high_priority_running == 0 && total_running > 0) {
             high_priority_waiting++;
             cond_wait(&high_prio_cond, &sync_lock);
