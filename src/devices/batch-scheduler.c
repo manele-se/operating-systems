@@ -100,7 +100,8 @@ void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
 {
     char name[16];
 
-    if (total_threads == 0) return;
+    int total_threads = num_tasks_send + num_task_receive +
+                        num_priority_send + num_priority_receive;
 
     /* Create threads in random order - gives better testing */
 
@@ -190,13 +191,13 @@ void getSlot(task_t task)
             waiting = true;
             low_priority_waiting--;
         }
-        else if (task.direction == SENDER && (receivers_running > 0 || total_running == MAX_CAPACITY)) {
+        else if (task.direction == SENDER && (receivers_running > 0 || total_running >= BUS_CAPACITY)) {
             senders_waiting++;
             cond_wait(&senders_cond, &sync_lock);
             waiting = true;
             senders_waiting--;
         }
-        else if (task.direction == RECEIVER && (senders_running > 0 || total_running == MAX_CAPACITY)) {
+        else if (task.direction == RECEIVER && (senders_running > 0 || total_running >= BUS_CAPACITY)) {
             receivers_waiting++;
             cond_wait(&receivers_cond, &sync_lock);
             waiting = true;
