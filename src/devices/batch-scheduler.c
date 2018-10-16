@@ -255,5 +255,15 @@ void leaveSlot(task_t task)
         cond_signal(&receivers_cond, &sync_lock);
     }
 
+    if (task.priority) {
+        high_priority_running--;
+    }
+    if (task.direction == SENDER) {
+        senders_running--;
+    }
+    else {
+        receivers_running--;
+    }
+
     lock_release(&sync_lock);
 }
