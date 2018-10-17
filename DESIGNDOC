@@ -40,7 +40,7 @@ Additions to struct thread:
 
 When calling timer_sleep:
   The time to wake up is calculated and put in sleep_until.
-  The thread is blocked by a call to thread_block
+  The thread is blocked by a call to thread_block.
 
 At each timer tick, in the thread_tick function:
   All threads with a non-zero value of sleep_until are checked
@@ -55,12 +55,12 @@ At each timer tick, in the thread_tick function:
   threads: no extra list, an extra linked list, and a priority queue.
 
   The submitted solution uses no extra list and identifies the
-  sleeping threads to wakt up using thread_foreach. This gives us the
+  sleeping threads to wake up using thread_foreach. This gives us the
   following result:
   Timer: 934 ticks
   Thread: 550 idle ticks, 386 kernel ticks, 0 user ticks
 
-  The second solution involved adding an extra struct list called
+  The second solution involved adding an extra linked list called
   sleeping_threads. By using list_insert_ordered, the list was
   kept sorted by wakeup time. That gave us the following result:
   Timer: 925 ticks
@@ -97,11 +97,11 @@ At each timer tick, in the thread_tick function:
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
 
-  As discussed indepth in A3 above, we chose this design because it
+  As discussed in depth in A3 above, we chose this design because it
   appears to be more elegant and readable.
 
   Also, we first tried using a semaphore for making the thread sleep,
-  but realized that the code we were is internal to the thread
+  but realized that the code we were writing is internal to the thread
   mechanism, and that a simple thread_block and thread_unblock is enough.
 
           BATCH SCHEDULING
@@ -112,7 +112,7 @@ At each timer tick, in the thread_tick function:
 >> `struct' member, global or static variable, semaphore, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
-Lock for synchronizing coordinated semaphore operations:
+Lock for synchronizing coordinated operations:
 
 static struct lock sync_lock;
 
@@ -143,7 +143,7 @@ static struct condition low_prio_receivers_cond;
 
 ---- SYNCHRONIZATION ----
 
->> C1: How does your solution guarantee that no more that 3 tasks
+>> C1: How does your solution guarantee that no more than 3 tasks
 >> are using the bus in the same direction?
 
   The solution is based on the Old Bridge Problem. When a task
@@ -159,10 +159,10 @@ static struct condition low_prio_receivers_cond;
   the corresponding condition variable is signalled, because we
   can assume that the "one out : one in" principle can apply.
 
-  When MULTIPLE new tasks could be allowed, for example when a SENDER
-  is done, and there are multiple RECEIVERs waiting to start, the
-  corresponding condition variable is broadcasted, instead of
-  just signalled.
+  When MULTIPLE new tasks could be allowed, for example when the
+  last SENDER is done, and there are multiple RECEIVERs waiting
+  to start, the corresponding condition variable is broadcasted,
+  instead of just signalled.
 
 >> C2: What prevents tasks from opposite directions from using the
 >> bus simultaneously?
@@ -193,16 +193,16 @@ static struct condition low_prio_receivers_cond;
 >> C6: Why did you choose this design? Did you consider other design 
 >> alternatives? In what ways is it superior to another design you considered?
 
-  At first, I tried using a combination of semaphores and condition variables
+  At first, we tried using a combination of semaphores and condition variables
   where semaphores were used to count running tasks of different kinds.
   
-  It seemed to work properly, but I wanted to test it further, so instead of
-  starting threads in a neat order, I changed my batchScheduler function so
-  that it now starts threads in random order. That helped me discover a lot
-  of bugs, so I introduced a lot of control mechanisms. I eventually got
-  it working, but the solution was too complex.
+  It seemed to work properly, but we wanted to test it further, so instead of
+  starting threads in a neat order, we changed the batchScheduler function so
+  that it now starts threads in random order. That helped us discover a lot
+  of bugs, so we introduced a lot of extra control mechanisms. We eventually
+  got it working, but the solution was too complex.
 
-  Instead, I made this solution as an extension of the Old Bridge Problem.
+  Instead, we made this solution as an extension of the Old Bridge Problem.
   Now it is much more easy to understand, and it is probably more efficient.
 
          SURVEY QUESTIONS (optional)
@@ -217,10 +217,16 @@ the quarter.
 >> In your opinion, was this assignment, or any one of the three problems
 >> in it, too easy or too hard?  Did it take too long or too little time?
 
-  I found this assignment very 
+  We found this assignment very difficult. Even though we thought we
+  understood enough to solve the problems, our first solutions were
+  not very optimized. It has taken us much more time than we thought.
 
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
+
+  Threads are a new concept for us, and even if synchronization was
+  one topic from a previous course on real time systems, this is the
+  first time we go into this level of depth.
 
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
@@ -228,5 +234,7 @@ the quarter.
 
 >> Do you have any suggestions for the TAs to more effectively assist
 >> students, either for future quarters?
+
+  Hire more assistants.
 
 >> Any other comments?
