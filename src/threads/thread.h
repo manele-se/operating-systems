@@ -99,8 +99,6 @@ struct thread
     /* Lab 2 Task 1 - Improve timer_sleep */
     /* stores the time to wake up a sleeping thread */
     int64_t sleep_until;
-    /* allows the thread to be in a list of sleeping threads */
-    struct list_elem sleep_elem;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

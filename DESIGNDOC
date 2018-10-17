@@ -1,10 +1,10 @@
-			+--------------------+
-			|    EDA092/DIT400   |
-			| LAB ASSIGNMENT 2:  |
-			| 	THREADS      |
-			|   DESIGN DOCUMENT  |
-			+--------------------+
-				   
+      +--------------------+
+      |    EDA092/DIT400   |
+      | LAB ASSIGNMENT 2:  |
+      | 	THREADS      |
+      |   DESIGN DOCUMENT  |
+      +--------------------+
+
 ---- GROUP 19 ----
 
 Elena Marzi <marzi@student.chalmers.se>
@@ -19,8 +19,8 @@ Johannes Magnusson <mjohann@student.chalmers.se>
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course staff.
 
-			     ALARM CLOCK
-			     ===========
+           ALARM CLOCK
+           ===========
 
 ---- DATA STRUCTURES ----
 
@@ -29,18 +29,9 @@ Johannes Magnusson <mjohann@student.chalmers.se>
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
 Additions to struct thread:
-    +   struct semaphore sleep_semaphore;
-	    Semaphore for blocking and unblocking the thread.
-		Gets initialized to zero in init_thread.
-
     +   int64_t sleep_until;
         Stores the time to wake up a sleeping thread.
-		Gets set in timer_sleep.
-
-Later addition to thread.c:
-    +   struct list sleeping_threads;
-	    Global ordered list of sleeping threads, sorted
-		by time to wake up (sleep_until).
+        Gets set in timer_sleep.
 
 ---- ALGORITHMS ----
 
@@ -49,68 +40,68 @@ Later addition to thread.c:
 
 When calling timer_sleep:
   The time to wake up is calculated and put in sleep_until.
-  The thread's sleep semaphore is decreased, which blocks the thread.
-  The thread is added to the list of sleeping threads.
+  The thread is blocked by a call to thread_block
 
 At each timer tick, in the thread_tick function:
-  The threads that are in the list of sleeping threads are checked.
-  Those threads that are due to wake up:
-    Their sleep semaphore is increased, which unblocks the thread.
-  The list is ordered by wakeup time.
+  All threads with a non-zero value of sleep_until are checked
+  Those with a value of sleep_until that is equal to or
+  smaller than the current time, are woken up by a
+  call to thread_unblock
 
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
 
-  The first solution, which is left in the code as comments, used
-  thread_foreach in each thread_tick to loop through all threads and
-  wake up those that were due to wake up. This was not
-  efficient enough : O(n).
+  We have tried three different approaches for handling sleeping
+  threads: no extra list, an extra linked list, and a priority queue.
 
-  Instead, an ordered list has been created. Because it is sorted
-  by wakeup time, checking for threads to wake up is O(1). The list is a 
-  linked list, so we assumed that insertion would be slow. Therefore, we
-  wrote a priority queue implementation, which is also left in the code
-  as comments, for reference.
+  The submitted solution uses no extra list and identifies the
+  sleeping threads to wakt up using thread_foreach. This gives us the
+  following result:
+  Timer: 934 ticks
+  Thread: 550 idle ticks, 386 kernel ticks, 0 user ticks
 
-  After testing, we obtained the following results:
-
-  Linked list:
+  The second solution involved adding an extra struct list called
+  sleeping_threads. By using list_insert_ordered, the list was
+  kept sorted by wakeup time. That gave us the following result:
   Timer: 925 ticks
   Thread: 550 idle ticks, 378 kernel ticks, 0 user ticks
 
-  Priority queue:
+  The third solution involved writing our own priority queue
+  implementation using the min-heap approach, in the prioq.c and
+  prioq.h files. This approach gave us the following result:
   Timer: 926 ticks
   Thread: 550 idle ticks, 379 kernel ticks, 0 user ticks
 
-  Therefore, we chose to go back to the linked list solution. It appears
-  the O(log n) time for removing from a priority queue added too much
-  overhead, even though insertion probably is more efficient.
+  Even though the sorted list or the priority queue appears more
+  efficient, we opted to go with the thread_foreach solution, because
+  this is elegant, much more readable, and we deem it efficient
+  enough.
 
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
 
-  Each thread has its own semaphore, which gives each thread a separate
-  mechanism for knowing when to wake up.
+  The timer_sleep function only reads/writes local variables
+  or parameters. Multiple calls to timer_sleep would have different
+  stack pointers, which makes timer_sleep reentrant. Also, blocking
+  a thread must be done with disabled interrupts.
 
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
 
-  Adding to the list of sleeping threads takes place between
-  intr_disable and intr_enable, so that the sensitive list insertion
-  code runs without being interrupted.
+  The call to timer_block is done with disabled interrupts.
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
 
-  As discussed indepth in A3 above, we chose this design because it appears to
-  be the most efficient in terms of time spent in timer interrupt.
+  As discussed indepth in A3 above, we chose this design because it
+  appears to be more elegant and readable.
 
-			    BATCH SCHEDULING
-			    ================
+          BATCH SCHEDULING
+          ================
 ---- DATA STRUCTURES ----
 
 >> A1: Copy here the declaration of each new or changed `struct' or

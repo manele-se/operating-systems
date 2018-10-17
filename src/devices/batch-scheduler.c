@@ -35,21 +35,11 @@ static int senders_waiting = 0;
 static int receivers_waiting = 0;
 static int low_priority_waiting = 0;
 static int high_priority_waiting = 0;
+
 static struct condition low_prio_cond;
 static struct condition high_prio_cond;
 static struct condition senders_cond;
 static struct condition receivers_cond;
-
-/* Semaphores that keep track of currently sending/receiving tasks */
-struct semaphore senders_sema;
-struct semaphore receivers_sema;
-
-/* Condition variables that signals:
- * - to senders that no task is receiving
- * - to receivers that no task is sending
- */
-struct condition sending_ok_cond;
-struct condition receiving_ok_cond;
 
 void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
         unsigned int num_priority_send, unsigned int num_priority_receive);
@@ -62,10 +52,9 @@ void receiverPriorityTask(void *);
 
 
 void oneTask(task_t task);/*Task requires to use the bus and executes methods below*/
-	void getSlot(task_t task); /* task tries to use slot on the bus */
-	void transferData(task_t task); /* task processes data on the bus either sending or receiving based on the direction*/
-	void leaveSlot(task_t task); /* task release the slot */
-
+void getSlot(task_t task); /* task tries to use slot on the bus */
+void transferData(task_t task); /* task processes data on the bus either sending or receiving based on the direction*/
+void leaveSlot(task_t task); /* task release the slot */
 
 
 /* initializes semaphores */ 
@@ -73,11 +62,7 @@ void init_bus(void){
     random_init((unsigned int)123456789); 
 
     lock_init(&sync_lock);
-/*    sema_init(&capacity_sema, BUS_CAPACITY);
-    sema_init(&high_senders_sema, 0);
-    sema_init(&high_receivers_sema, 0);
-    cond_init(&high_prio_cond);
-    cond_init(&start_all_cond);*/
+
     cond_init(&low_prio_cond);
     cond_init(&high_prio_cond);
     cond_init(&senders_cond);
@@ -135,7 +120,14 @@ void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
 
     do {
         thread_yield();
-    } while (senders_running + receivers_running + high_priority_running + senders_waiting + receivers_waiting + low_priority_waiting + high_priority_waiting);
+    } while (senders_running +
+             receivers_running +
+             high_priority_running +
+             senders_waiting +
+             receivers_waiting +
+             low_priority_waiting +
+             high_priority_waiting
+             > 0);
 
     vmsg("Done!");
 }
@@ -202,6 +194,9 @@ void getSlot(task_t task)
             cond_wait(&receivers_cond, &sync_lock);
             waiting = true;
             receivers_waiting--;
+        }
+        else {
+            waiting = false;
         }
     } while (waiting);
 
