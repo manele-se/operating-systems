@@ -117,20 +117,88 @@ At each timer tick, in the thread_tick function:
 >> `struct' member, global or static variable, semaphore, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+Lock for synchronizing coordinated semaphore operations:
+struct lock sync_lock;
+
+Semaphore that keeps track of number of running threads:
+struct semaphore running_sema;
+
+Semaphore that lets main thread wait for all running threads:
+struct semaphore main_wait_sema;
+
+Semaphore that keeps track of high-priority sender and receiver
+threads, waiting for a slot:
+struct semaphore high_senders_sema;
+struct semaphore high_receivers_sema;
+
+Condition variable that lets low priority threads wait until all
+high priority threads are done:
+struct condition high_prio_cond;
+
+Condition variable that signals to all threads to start:
+struct condition start_all_cond;
+
+Semaphore that keeps the maximum connections to BUS_CAPACITY:
+struct semaphore capacity_sema;
+
+Semaphores that keep track of currently sending/receiving tasks:
+struct semaphore senders_sema;
+struct semaphore receivers_sema;
+
+Condition variables that signal:
+ - to senders that no task is receiving
+ - to receivers that no task is sending
+struct condition sending_ok_cond;
+struct condition receiving_ok_cond;
+
 ---- SYNCHRONIZATION ----
 
 >> C1: How does your solution guarantee that no more that 3 tasks
 >> are using the bus in the same direction?
 
+  There is a semaphore called capacity_sema, which is initialized
+  with the value 3 (BUS_CAPACITY) in bus_init.
+
+  When a task starts, it pulls that semaphore down, in the getSlot function.
+
+  When a task ends, it pulls that semaphore up, in the leaveSlot function.
+
 >> C2: What prevents tasks from opposite directions from using the
 >> bus simultaneously?
+
+  When a sender starts, it pulls the senders_sema semaphore up, to count
+  the number of current senders. When a sender ends, it pulls the
+  senders_sema semaphore down. If the value reaches 0, it does a broadcast
+  on the receiving_ok_cond condition variable.
+
+  If a receiver tries to start when the senders_sema value is > 0, it
+  waits for the receiving_ok_cond to get signalled.
+
+  Vice versa for the other direction.
 
 >> C3: How does your solution grant priority to high priority tasks over
 >> the waiting tasks in the same direction?
 
+  When a high priority task starts, it pulls either the high_senders_sema
+  or the high_receivers_sema up. When that task ends, it pulls the same
+  semaphore down. If the sum after pulling down is 0, it does a broadcast
+  on the high_prio_cond condition variable.
+
+  When a low priority task starts, and the sum of high_senders_sema and
+  high_receivers_sema > 0, it waits for the high_prio_cond condition
+  variable.
+
 >> C4: How do you guarantee that despite having priority, high priority
->> tasks do not start using the bus while there are still still using
+>> tasks do not start using the bus while there are still tasks using
 >> it in the oposite direction?
+
+  The combination of C2 and C3 solves this. Also the order of semaphore
+  and condition variable operations guarantees this.
+
+  The getSlot function does not finish until all requirements are
+  fulfilled. So for example, if a low priority task is sending, and a
+  new high priority receiver task arrives, it sees that senders_sema has
+  a non-zero value, and waits for the receiving_ok_cond to get signalled.
 
 ---- RATIONALE ----
 

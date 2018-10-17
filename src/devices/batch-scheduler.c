@@ -28,26 +28,17 @@ typedef struct {
 /* Lock for synchronizing coordinated semaphore operations */
 struct lock sync_lock;
 
-/* Semaphore that keeps track of number of running threads */
-struct semaphore running_sema;
-
-/* Semaphore that lets main thread wait for all running threads */
-struct semaphore main_wait_sema;
-
-/* Semaphore that keeps track of high-priority sender and
- * receiver threads, waiting for a slot */
-struct semaphore high_senders_sema;
-struct semaphore high_receivers_sema;
-
-/* Condition variable that lets low priority threads wait
- * until all high priority threads are done */
-struct condition high_prio_cond;
-
-/* Condition variable that signals to all threads to start */
-struct condition start_all_cond;
-
-/* Semaphore that keeps the maximum connections to BUS_CAPACITY */
-struct semaphore capacity_sema;
+static int senders_running = 0;
+static int receivers_running = 0;
+static int high_priority_running = 0;
+static int senders_waiting = 0;
+static int receivers_waiting = 0;
+static int low_priority_waiting = 0;
+static int high_priority_waiting = 0;
+static struct condition low_prio_cond;
+static struct condition high_prio_cond;
+static struct condition senders_cond;
+static struct condition receivers_cond;
 
 /* Semaphores that keep track of currently sending/receiving tasks */
 struct semaphore senders_sema;
@@ -82,17 +73,15 @@ void init_bus(void){
     random_init((unsigned int)123456789); 
 
     lock_init(&sync_lock);
-    sema_init(&capacity_sema, BUS_CAPACITY);
-
+/*    sema_init(&capacity_sema, BUS_CAPACITY);
     sema_init(&high_senders_sema, 0);
     sema_init(&high_receivers_sema, 0);
     cond_init(&high_prio_cond);
-    cond_init(&start_all_cond);
-
-    sema_init(&senders_sema, 0);
-    sema_init(&receivers_sema, 0);
-    cond_init(&sending_ok_cond);
-    cond_init(&receiving_ok_cond);
+    cond_init(&start_all_cond);*/
+    cond_init(&low_prio_cond);
+    cond_init(&high_prio_cond);
+    cond_init(&senders_cond);
+    cond_init(&receivers_cond);
 }
 
 /*
@@ -109,16 +98,10 @@ void init_bus(void){
 void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
         unsigned int num_priority_send, unsigned int num_priority_receive)
 {
-    int total_threads = num_tasks_send +
-                        num_task_receive +
-                        num_priority_send +
-                        num_priority_receive;
     char name[16];
 
-    if (total_threads == 0) return;
-
-    sema_init(&running_sema, 0);
-    sema_init(&main_wait_sema, 0);
+    int total_threads = num_tasks_send + num_task_receive +
+                        num_priority_send + num_priority_receive;
 
     /* Create threads in random order - gives better testing */
 
@@ -150,13 +133,10 @@ void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
         }
     }
 
-    thread_yield();
-    lock_acquire(&sync_lock);
-    cond_broadcast(&start_all_cond, &sync_lock);
-    lock_release(&sync_lock);
+    do {
+        thread_yield();
+    } while (senders_running + receivers_running + high_priority_running + senders_waiting + receivers_waiting + low_priority_waiting + high_priority_waiting);
 
-    /* Wait for all threads to finish */
-    sema_down(&main_wait_sema);
     vmsg("Done!");
 }
 
@@ -191,43 +171,51 @@ void oneTask(task_t task) {
   leaveSlot(task);
 }
 
-
 /* task tries to get slot on the bus subsystem */
 void getSlot(task_t task) 
 {
-    sema_up(&running_sema);
-
+    bool waiting = false;
     lock_acquire(&sync_lock);
-    if (task.priority) {
-        if (task.direction == SENDER) {
-            sema_up(&high_senders_sema);
-        }
-        else {
-            sema_up(&high_receivers_sema);
-        }
-        cond_wait(&start_all_cond, &sync_lock);
-    }
-    else {
-        cond_wait(&start_all_cond, &sync_lock);
-        if (high_senders_sema.value + high_receivers_sema.value > 0) {
+
+    do {
+        int total_running = senders_running + receivers_running;
+        if (task.priority == HIGH && high_priority_running == 0 && total_running > 0) {
+            high_priority_waiting++;
             cond_wait(&high_prio_cond, &sync_lock);
+            waiting = true;
+            high_priority_waiting--;
         }
+        else if (task.priority == NORMAL && high_priority_running > 0) {
+            low_priority_waiting++;
+            cond_wait(&low_prio_cond, &sync_lock);
+            waiting = true;
+            low_priority_waiting--;
+        }
+        else if (task.direction == SENDER && (receivers_running > 0 || total_running >= BUS_CAPACITY)) {
+            senders_waiting++;
+            cond_wait(&senders_cond, &sync_lock);
+            waiting = true;
+            senders_waiting--;
+        }
+        else if (task.direction == RECEIVER && (senders_running > 0 || total_running >= BUS_CAPACITY)) {
+            receivers_waiting++;
+            cond_wait(&receivers_cond, &sync_lock);
+            waiting = true;
+            receivers_waiting--;
+        }
+    } while (waiting);
+
+    if (task.priority == HIGH) {
+        high_priority_running++;
     }
     if (task.direction == SENDER) {
-        if (receivers_sema.value > 0) {
-            cond_wait(&sending_ok_cond, &sync_lock);
-        }
-        sema_up(&senders_sema);
+        senders_running++;
     }
-    else {
-        if (senders_sema.value > 0) {
-            cond_wait(&receiving_ok_cond, &sync_lock);
-        }
-        sema_up(&receivers_sema);
+    if (task.direction == RECEIVER) {
+        receivers_running++;
     }
-    lock_release(&sync_lock);
 
-    sema_down(&capacity_sema);
+    lock_release(&sync_lock);
 }
 
 #define RANDOM_SLEEP_MIN 10
@@ -247,42 +235,36 @@ void transferData(task_t task)
 void leaveSlot(task_t task) 
 {
     lock_acquire(&sync_lock);
-    if (task.priority) {
-        if (task.direction == SENDER) {
-            sema_down(&high_senders_sema);
-        }
-        else {
-            sema_down(&high_receivers_sema);
-        }
-        if (high_senders_sema.value + high_receivers_sema.value == 0) {
-            cond_broadcast(&high_prio_cond, &sync_lock);
-        }
-    }
 
+    if (task.priority) {
+        high_priority_running--;
+    }
     if (task.direction == SENDER) {
-        sema_down(&senders_sema);
-        if (sema_try_down(&senders_sema)) {
-            sema_up(&senders_sema);
-        }
-        else {
-            cond_broadcast(&receiving_ok_cond, &sync_lock);
-        }
+        senders_running--;
     }
     else {
-        sema_down(&receivers_sema);
-        if (sema_try_down(&receivers_sema)) {
-            sema_up(&receivers_sema);
-        }
-        else {
-            cond_broadcast(&sending_ok_cond, &sync_lock);
-        }
+        receivers_running--;
     }
-
-    sema_down(&running_sema);
-    if (running_sema.value == 0) {
-        sema_up(&main_wait_sema);
+    
+    /* Att göra: Tänk VERKLIGEN på rätt if-satser! */
+    if (high_priority_waiting > 0) {
+        cond_broadcast(&high_prio_cond, &sync_lock);
+    }
+    else if (low_priority_waiting > 0) {
+        cond_broadcast(&low_prio_cond, &sync_lock);
+    }
+    else if (senders_waiting > 0 && senders_running > 0) {
+        cond_signal(&senders_cond, &sync_lock);
+    }
+    else if (receivers_waiting > 0 && receivers_running > 0) {
+        cond_signal(&receivers_cond, &sync_lock);
+    }
+    else if (senders_waiting > 0) {
+        cond_signal(&senders_cond, &sync_lock);
+    }
+    else if (receivers_waiting > 0) {
+        cond_signal(&receivers_cond, &sync_lock);
     }
 
     lock_release(&sync_lock);
-    sema_up(&capacity_sema);
 }
