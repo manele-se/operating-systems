@@ -100,6 +100,10 @@ At each timer tick, in the thread_tick function:
   As discussed indepth in A3 above, we chose this design because it
   appears to be more elegant and readable.
 
+  Also, we first tried using a semaphore for making the thread sleep,
+  but realized that the code we were is internal to the thread
+  mechanism, and that a simple thread_block and thread_unblock is enough.
+
           BATCH SCHEDULING
           ================
 ---- DATA STRUCTURES ----
@@ -109,96 +113,100 @@ At each timer tick, in the thread_tick function:
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
 Lock for synchronizing coordinated semaphore operations:
-struct lock sync_lock;
 
-Semaphore that keeps track of number of running threads:
-struct semaphore running_sema;
+static struct lock sync_lock;
 
-Semaphore that lets main thread wait for all running threads:
-struct semaphore main_wait_sema;
+Variables for counting number of runnings tasks of different categories.
+These are used to keep track of the current direction of the bus, and
+also the current highest priority level of tasks on the bus:
 
-Semaphore that keeps track of high-priority sender and receiver
-threads, waiting for a slot:
-struct semaphore high_senders_sema;
-struct semaphore high_receivers_sema;
+static int senders_running = 0;
+static int receivers_running = 0;
+static int high_priority_running = 0;
 
-Condition variable that lets low priority threads wait until all
-high priority threads are done:
-struct condition high_prio_cond;
+Variables for counting number of waiting tasks of different categories.
+These are used to know what type of tasks to wake up when one task is
+done:
 
-Condition variable that signals to all threads to start:
-struct condition start_all_cond;
+static int high_prio_senders_waiting = 0;
+static int high_prio_receivers_waiting = 0;
+static int low_prio_senders_waiting = 0;
+static int low_prio_receivers_waiting = 0;
 
-Semaphore that keeps the maximum connections to BUS_CAPACITY:
-struct semaphore capacity_sema;
+Condition variables for waiting tasks to use. These are used to wake
+up single tasks or groups of tasks when one task is done:
 
-Semaphores that keep track of currently sending/receiving tasks:
-struct semaphore senders_sema;
-struct semaphore receivers_sema;
-
-Condition variables that signal:
- - to senders that no task is receiving
- - to receivers that no task is sending
-struct condition sending_ok_cond;
-struct condition receiving_ok_cond;
+static struct condition high_prio_senders_cond;
+static struct condition high_prio_receivers_cond;
+static struct condition low_prio_senders_cond;
+static struct condition low_prio_receivers_cond;
 
 ---- SYNCHRONIZATION ----
 
 >> C1: How does your solution guarantee that no more that 3 tasks
 >> are using the bus in the same direction?
 
-  There is a semaphore called capacity_sema, which is initialized
-  with the value 3 (BUS_CAPACITY) in bus_init.
+  The solution is based on the Old Bridge Problem. When a task
+  tries to start, in the getSlot function, if the bus is full,
+  the task waits for a condition variable before retrying to start.
 
-  When a task starts, it pulls that semaphore down, in the getSlot function.
+  Which condition variable the task waits for depends on its
+  priority and direction.
 
-  When a task ends, it pulls that semaphore up, in the leaveSlot function.
+  In the leaveSlot function, when a SINGLE new task should be
+  allowed, for exemple when a HIGH priority SENDER is done, and
+  there is at least one HIGH priority SENDER waiting to start,
+  the corresponding condition variable is signalled, because we
+  can assume that the "one out : one in" principle can apply.
+
+  When MULTIPLE new tasks could be allowed, for example when a SENDER
+  is done, and there are multiple RECEIVERs waiting to start, the
+  corresponding condition variable is broadcasted, instead of
+  just signalled.
 
 >> C2: What prevents tasks from opposite directions from using the
 >> bus simultaneously?
 
-  When a sender starts, it pulls the senders_sema semaphore up, to count
-  the number of current senders. When a sender ends, it pulls the
-  senders_sema semaphore down. If the value reaches 0, it does a broadcast
-  on the receiving_ok_cond condition variable.
-
-  If a receiver tries to start when the senders_sema value is > 0, it
-  waits for the receiving_ok_cond to get signalled.
-
-  Vice versa for the other direction.
+  When a task tries to start, in the getSlot function, if the task
+  is a SENDER and at least one RECEIVER is currently using the bus,
+  or it is a RECEIVER and at least one SENDER is using the bus,
+  the task waits for a condition variable before retrying to start.
 
 >> C3: How does your solution grant priority to high priority tasks over
 >> the waiting tasks in the same direction?
 
-  When a high priority task starts, it pulls either the high_senders_sema
-  or the high_receivers_sema up. When that task ends, it pulls the same
-  semaphore down. If the sum after pulling down is 0, it does a broadcast
-  on the high_prio_cond condition variable.
-
-  When a low priority task starts, and the sum of high_senders_sema and
-  high_receivers_sema > 0, it waits for the high_prio_cond condition
-  variable.
+  When a task tries to start, in the getSlot function, if the task
+  has NORMAL priority and at least one HIGH priority task is running, or
+  at least one HIGH priority task of the same direction is waiting to
+  run, the task waits for a condition variable before retrying to start.
 
 >> C4: How do you guarantee that despite having priority, high priority
 >> tasks do not start using the bus while there are still tasks using
 >> it in the oposite direction?
 
-  The combination of C2 and C3 solves this. Also the order of semaphore
-  and condition variable operations guarantees this.
-
-  The getSlot function does not finish until all requirements are
-  fulfilled. So for example, if a low priority task is sending, and a
-  new high priority receiver task arrives, it sees that senders_sema has
-  a non-zero value, and waits for the receiving_ok_cond to get signalled.
+  Even if the task's priority is HIGH, if any task of the opposite
+  direction is currently running, the priority of the other task is
+  not taken into consideration, so the new task waits.
 
 ---- RATIONALE ----
 
 >> C6: Why did you choose this design? Did you consider other design 
 >> alternatives? In what ways is it superior to another design you considered?
 
+  At first, I tried using a combination of semaphores and condition variables
+  where semaphores were used to count running tasks of different kinds.
+  
+  It seemed to work properly, but I wanted to test it further, so instead of
+  starting threads in a neat order, I changed my batchScheduler function so
+  that it now starts threads in random order. That helped me discover a lot
+  of bugs, so I introduced a lot of control mechanisms. I eventually got
+  it working, but the solution was too complex.
 
-			   SURVEY QUESTIONS (optional)
-			   ===========================
+  Instead, I made this solution as an extension of the Old Bridge Problem.
+  Now it is much more easy to understand, and it is probably more efficient.
+
+         SURVEY QUESTIONS (optional)
+         ===========================
 
 Answering these questions is optional, but it will help us improve the
 course in future quarters.  Feel free to tell us anything you
@@ -208,6 +216,8 @@ the quarter.
 
 >> In your opinion, was this assignment, or any one of the three problems
 >> in it, too easy or too hard?  Did it take too long or too little time?
+
+  I found this assignment very 
 
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?

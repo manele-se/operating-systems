@@ -26,20 +26,24 @@ typedef struct {
 } task_t;
 
 /* Lock for synchronizing coordinated semaphore operations */
-struct lock sync_lock;
+static struct lock sync_lock;
 
+/* Variables for counting number of runnings tasks of different categories */
 static int senders_running = 0;
 static int receivers_running = 0;
 static int high_priority_running = 0;
-static int senders_waiting = 0;
-static int receivers_waiting = 0;
-static int low_priority_waiting = 0;
-static int high_priority_waiting = 0;
 
-static struct condition low_prio_cond;
-static struct condition high_prio_cond;
-static struct condition senders_cond;
-static struct condition receivers_cond;
+/* Variables for counting number of waiting tasks of different categories */
+static int high_prio_senders_waiting = 0;
+static int high_prio_receivers_waiting = 0;
+static int low_prio_senders_waiting = 0;
+static int low_prio_receivers_waiting = 0;
+
+/* Condition variables for waiting tasks to use */
+static struct condition high_prio_senders_cond;
+static struct condition high_prio_receivers_cond;
+static struct condition low_prio_senders_cond;
+static struct condition low_prio_receivers_cond;
 
 void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
         unsigned int num_priority_send, unsigned int num_priority_receive);
@@ -63,10 +67,11 @@ void init_bus(void){
 
     lock_init(&sync_lock);
 
-    cond_init(&low_prio_cond);
-    cond_init(&high_prio_cond);
-    cond_init(&senders_cond);
-    cond_init(&receivers_cond);
+    /* Initialize condition variables */
+    cond_init(&high_prio_senders_cond);
+    cond_init(&high_prio_receivers_cond);
+    cond_init(&low_prio_senders_cond);
+    cond_init(&low_prio_receivers_cond);
 }
 
 /*
@@ -85,49 +90,50 @@ void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
 {
     char name[16];
 
-    int total_threads = num_tasks_send + num_task_receive +
-                        num_priority_send + num_priority_receive;
-
     /* Create threads in random order - gives better testing */
-
-    while (total_threads > 0) {
+    while (num_tasks_send + num_task_receive +
+           num_priority_send + num_priority_receive > 0) {
         unsigned long r = random_ulong() % 4;
         if (r == 0 && num_priority_send > 0) {
             snprintf(name, 16, "send_high_%d", num_priority_send);
             thread_create(name, HIGH, senderPriorityTask, NULL);
             --num_priority_send;
-            --total_threads;
         }
         else if (r == 1 && num_priority_receive > 0) {
             snprintf(name, 16, "rec_high_%d", num_priority_receive);
             thread_create(name, HIGH, receiverPriorityTask, NULL);
             --num_priority_receive;
-            --total_threads;
         }
         else if (r == 2 && num_tasks_send > 0) {
             snprintf(name, 16, "send_low_%d", num_tasks_send);
             thread_create(name, HIGH, senderTask, NULL);
             --num_tasks_send;
-            --total_threads;
         }
         else if (r == 3 && num_task_receive > 0) {
             snprintf(name, 16, "rec_low_%d", num_task_receive);
             thread_create(name, HIGH, receiverTask, NULL);
             --num_task_receive;
-            --total_threads;
         }
     }
 
-    do {
-        thread_yield();
-    } while (senders_running +
-             receivers_running +
-             high_priority_running +
-             senders_waiting +
-             receivers_waiting +
-             low_priority_waiting +
-             high_priority_waiting
-             > 0);
+    /* Repeated sleep until all tasks are done */
+    bool waiting = true;
+    while (waiting) {
+        timer_sleep(100);
+
+        lock_acquire(&sync_lock);
+        if (senders_running +
+            receivers_running +
+            high_priority_running +
+            high_prio_senders_waiting +
+            high_prio_receivers_waiting +
+            low_prio_senders_waiting +
+            low_prio_receivers_waiting
+            == 0) {
+                waiting = false;
+            }
+        lock_release(&sync_lock);
+    }
 
     vmsg("Done!");
 }
@@ -166,34 +172,42 @@ void oneTask(task_t task) {
 /* task tries to get slot on the bus subsystem */
 void getSlot(task_t task) 
 {
-    bool waiting = false;
+    bool waiting;
     lock_acquire(&sync_lock);
 
     do {
         int total_running = senders_running + receivers_running;
-        if (task.priority == HIGH && high_priority_running == 0 && total_running > 0) {
-            high_priority_waiting++;
-            cond_wait(&high_prio_cond, &sync_lock);
+        bool full = total_running >= BUS_CAPACITY;
+
+        if (task.priority == HIGH && task.direction == SENDER && (receivers_running > 0 || full)) {
+            /* High priority sender only waits if bus is currently receiving or full */
+            high_prio_senders_waiting++;
+            cond_wait(&high_prio_senders_cond, &sync_lock);
+            high_prio_senders_waiting--;
             waiting = true;
-            high_priority_waiting--;
         }
-        else if (task.priority == NORMAL && high_priority_running > 0) {
-            low_priority_waiting++;
-            cond_wait(&low_prio_cond, &sync_lock);
+        else if (task.priority == HIGH && task.direction == RECEIVER && (senders_running > 0 || full)) {
+            /* High priority receiver only waits if bus is currently sending or full */
+            high_prio_receivers_waiting++;
+            cond_wait(&high_prio_receivers_cond, &sync_lock);
+            high_prio_receivers_waiting--;
             waiting = true;
-            low_priority_waiting--;
         }
-        else if (task.direction == SENDER && (receivers_running > 0 || total_running >= BUS_CAPACITY)) {
-            senders_waiting++;
-            cond_wait(&senders_cond, &sync_lock);
+        else if (task.priority == NORMAL && task.direction == SENDER && (receivers_running > 0 || high_priority_running > 0 || high_prio_senders_waiting > 0 || full)) {
+            /* Low priority sender waits if bus is currently receiving, if any high priority task is running,
+             * any high priority sender is waiting, or if the bus is full */
+            low_prio_senders_waiting++;
+            cond_wait(&low_prio_senders_cond, &sync_lock);
+            low_prio_senders_waiting--;
             waiting = true;
-            senders_waiting--;
         }
-        else if (task.direction == RECEIVER && (senders_running > 0 || total_running >= BUS_CAPACITY)) {
-            receivers_waiting++;
-            cond_wait(&receivers_cond, &sync_lock);
+        else if (task.priority == NORMAL && task.direction == RECEIVER && (senders_running > 0 || high_priority_running > 0 || high_prio_receivers_waiting > 0 || full)) {
+            /* Low priority receiver waits if bus is currently sending, if any high priority task is running,
+             * any high priority receiver is waiting, or if the bus is full */
+            low_prio_receivers_waiting++;
+            cond_wait(&low_prio_receivers_cond, &sync_lock);
+            low_prio_receivers_waiting--;
             waiting = true;
-            receivers_waiting--;
         }
         else {
             waiting = false;
@@ -211,6 +225,7 @@ void getSlot(task_t task)
     }
 
     lock_release(&sync_lock);
+    vmsg("%s starting at %lu", thread_name(), timer_ticks());
 }
 
 #define RANDOM_SLEEP_MIN 10
@@ -229,6 +244,7 @@ void transferData(task_t task)
 /* task releases the slot */
 void leaveSlot(task_t task) 
 {
+    vmsg("%s stopping at %lu", thread_name(), timer_ticks());
     lock_acquire(&sync_lock);
 
     if (task.priority) {
@@ -241,24 +257,43 @@ void leaveSlot(task_t task)
         receivers_running--;
     }
     
-    /* Att göra: Tänk VERKLIGEN på rätt if-satser! */
-    if (high_priority_waiting > 0) {
-        cond_broadcast(&high_prio_cond, &sync_lock);
+    vmsg("%s Running H=%d S=%d R=%d Waiting HS=%d HR=%d LS=%d LR=%d",
+        thread_name(),
+        high_priority_running, senders_running, receivers_running,
+        high_prio_senders_waiting, high_prio_receivers_waiting,
+        low_prio_senders_waiting, low_prio_receivers_waiting);
+
+    if (task.direction == SENDER && high_prio_senders_waiting > 0) {
+        /* Currently sending - there are high priority senders waiting */
+        cond_signal(&high_prio_senders_cond, &sync_lock);
     }
-    else if (low_priority_waiting > 0) {
-        cond_broadcast(&low_prio_cond, &sync_lock);
+    else if (task.direction == RECEIVER && high_prio_receivers_waiting > 0) {
+        /* Currently receiving - there are high priority receivers waiting */
+        cond_signal(&high_prio_receivers_cond, &sync_lock);
     }
-    else if (senders_waiting > 0 && senders_running > 0) {
-        cond_signal(&senders_cond, &sync_lock);
+    else if (high_prio_senders_waiting > 0) {
+        /* There are high priority senders waiting */
+        cond_broadcast(&high_prio_senders_cond, &sync_lock);
     }
-    else if (receivers_waiting > 0 && receivers_running > 0) {
-        cond_signal(&receivers_cond, &sync_lock);
+    else if (high_prio_receivers_waiting > 0) {
+        /* There are high priority receivers waiting */
+        cond_broadcast(&high_prio_receivers_cond, &sync_lock);
     }
-    else if (senders_waiting > 0) {
-        cond_signal(&senders_cond, &sync_lock);
+    else if (task.direction == SENDER && low_prio_senders_waiting > 0) {
+        /* Currently sending - there are senders waiting */
+        cond_signal(&low_prio_senders_cond, &sync_lock);
     }
-    else if (receivers_waiting > 0) {
-        cond_signal(&receivers_cond, &sync_lock);
+    else if (task.direction == RECEIVER && low_prio_receivers_waiting > 0) {
+        /* Currently receiving - there are receivers waiting */
+        cond_signal(&low_prio_receivers_cond, &sync_lock);
+    }
+    else if (low_prio_senders_waiting > 0) {
+        /* There are senders waiting */
+        cond_broadcast(&low_prio_senders_cond, &sync_lock);
+    }
+    else if (low_prio_receivers_waiting > 0) {
+        /* There are receivers waiting */
+        cond_broadcast(&low_prio_receivers_cond, &sync_lock);
     }
 
     lock_release(&sync_lock);
