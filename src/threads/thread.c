@@ -170,9 +170,9 @@ thread_go_to_sleep(struct thread *thread, int64_t until)
   list_insert_ordered(&sleeping_threads, &thread->sleep_elem, compare_sleep_until, NULL);
   intr_enable();
 
-  /* Pull the semaphore's sleep semaphore down to
-   * a negative number, blocking the thread */
-  sema_down(&thread->sleep_semaphore);
+  /* Block the thread immediately */
+  thread_block();
+//  sema_down(&thread->sleep_semaphore);
 }
 
 /* Called by the timer interrupt handler at each timer tick.
@@ -224,7 +224,8 @@ thread_tick (void)
    if (sleeping->sleep_until <= timer_ticks()) {
 /*      printf("    %ld : Thread %d is sleeping until %ld - time to wake up!\n", timer_ticks(), sleeping->tid, sleeping->sleep_until);*/
      list_pop_front(&sleeping_threads);
-     sema_up(&sleeping->sleep_semaphore);
+     thread_unblock(sleeping);
+     //sema_up(&sleeping->sleep_semaphore);
    }
    else {
      break;

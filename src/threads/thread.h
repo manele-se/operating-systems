@@ -97,8 +97,6 @@ struct thread
     struct list_elem elem;              /* List element. */
 
     /* Lab 2 Task 1 - Improve timer_sleep */
-    /* semaphore for blocking and unblocking the thread */
-    struct semaphore sleep_semaphore;
     /* stores the time to wake up a sleeping thread */
     int64_t sleep_until;
     /* allows the thread to be in a list of sleeping threads */
